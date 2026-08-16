@@ -2,7 +2,7 @@
 
 use std::{
     ffi::{c_char, c_void},
-    sync::RwLock,
+    sync::{LazyLock, RwLock},
 };
 
 use maa_ffi_string::ToCString;
@@ -20,7 +20,8 @@ pub use error::{Error, Result};
 mod runtime_lifecycle;
 
 /// The user directory of the assistant.
-static USER_DIR: RwLock<std::path::PathBuf> = RwLock::new(std::path::PathBuf::new());
+static USER_DIR: LazyLock<RwLock<std::path::PathBuf>> =
+    LazyLock::new(|| RwLock::new(std::path::PathBuf::new()));
 
 /// Get the path of MaaCore's log file.
 ///

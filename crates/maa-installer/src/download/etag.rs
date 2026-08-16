@@ -7,11 +7,21 @@
 //! In rare concurrent write scenarios, some ETag updates may be lost, which is
 //! acceptable as the cache will be refreshed on the next check.
 
-use std::{fs, path::Path, time};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    time,
+};
 
 use ureq::http::StatusCode;
 
 use crate::error::{Error, ErrorKind, Result, WithDesc};
+
+fn etag_path(dest: &Path) -> PathBuf {
+    let mut path = dest.as_os_str().to_os_string();
+    path.push(".etag");
+    path.into()
+}
 
 pub fn download_with_etag(
     agent: &ureq::Agent,
@@ -19,7 +29,7 @@ pub fn download_with_etag(
     dest: &Path,
     check_interval: Option<time::Duration>,
 ) -> Result<()> {
-    let etag_file = dest.with_added_extension("etag");
+    let etag_file = etag_path(dest);
 
     let etag = if dest.exists() && etag_file.exists() {
         let modified = etag_file.metadata().ok().and_then(|m| m.modified().ok());
@@ -67,5 +77,64 @@ pub fn download_with_etag(
             Ok(())
         }
         s => Err(Error::new(ErrorKind::Network).with_desc(format!("unexpected status code {s}"))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{ffi::OsString, path::PathBuf};
+
+    use super::etag_path;
+
+    #[test]
+    fn etag_path_appends_to_name_without_extension() {
+        assert_eq!(
+            etag_path(PathBuf::from("manifest").as_path()),
+            PathBuf::from("manifest.etag")
+        );
+    }
+
+    #[test]
+    fn etag_path_preserves_existing_extension() {
+        assert_eq!(
+            etag_path(PathBuf::from("manifest.json").as_path()),
+            PathBuf::from("manifest.json.etag")
+        );
+    }
+
+    #[test]
+    fn etag_path_preserves_unicode() {
+        assert_eq!(
+            etag_path(PathBuf::from("명일방주.json").as_path()),
+            PathBuf::from("명일방주.json.etag")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn etag_path_preserves_non_utf8_bytes() {
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+        let path = PathBuf::from(OsString::from_vec(vec![b'm', 0x80]));
+        let result = etag_path(&path);
+
+        assert_eq!(result.as_os_str().as_bytes(), b"m\x80.etag");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn etag_path_preserves_unpaired_utf16() {
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
+
+        let path = PathBuf::from(OsString::from_wide(&[b'm' as u16, 0xd800]));
+        let result: Vec<_> = etag_path(&path).as_os_str().encode_wide().collect();
+
+        assert_eq!(
+            result,
+            [b'm' as u16, 0xd800]
+                .into_iter()
+                .chain(".etag".encode_utf16())
+                .collect::<Vec<_>>()
+        );
     }
 }
