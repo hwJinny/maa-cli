@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use super::window::{WindowCandidate, select_window, validate_win32_control_unit_at};
+use super::window::{
+    WindowCandidate, select_window, select_window_candidate, validate_win32_control_unit_at,
+};
 use crate::config::asst::WindowSelector;
 
 fn candidate(
@@ -49,6 +51,27 @@ fn optional_pid_disambiguates_matching_titles() {
     ];
 
     assert_eq!(select_window(&selector, &candidates).unwrap().get(), 2);
+}
+
+#[test]
+fn selected_candidate_preserves_probe_metadata_without_exposing_other_windows() {
+    let selector = WindowSelector {
+        title: "Arknights",
+        process_id: Some(102),
+        executable: None,
+    };
+    let candidates = vec![
+        candidate(1, "Arknights", 101, Some("C:/Other/Arknights.exe")),
+        candidate(2, "Arknights", 102, Some("C:/Game/Arknights.exe")),
+    ];
+
+    let selected = select_window_candidate(&selector, &candidates).unwrap();
+    assert_eq!(selected.handle, 2);
+    assert_eq!(selected.process_id, 102);
+    assert_eq!(
+        selected.executable,
+        Some(PathBuf::from("C:/Game/Arknights.exe"))
+    );
 }
 
 #[test]

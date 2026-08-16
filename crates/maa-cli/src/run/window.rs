@@ -24,10 +24,10 @@ pub(super) struct WindowCandidate {
 }
 
 #[cfg(any(windows, test))]
-pub(super) fn select_window(
+pub(super) fn select_window_candidate(
     selector: &WindowSelector<'_>,
     candidates: &[WindowCandidate],
-) -> Result<NonZeroIsize> {
+) -> Result<WindowCandidate> {
     let expected_executable = selector
         .executable
         .map(canonical_path)
@@ -58,13 +58,23 @@ pub(super) fn select_window(
             selector.title
         ),
         [candidate] => {
-            NonZeroIsize::new(candidate.handle).context("Matched window has a null handle")
+            NonZeroIsize::new(candidate.handle).context("Matched window has a null handle")?;
+            Ok((*candidate).clone())
         }
         _ => bail!(
             "Multiple visible top-level windows exactly matched title {:?}; set window_process_id or window_executable",
             selector.title
         ),
     }
+}
+
+#[cfg(test)]
+pub(super) fn select_window(
+    selector: &WindowSelector<'_>,
+    candidates: &[WindowCandidate],
+) -> Result<NonZeroIsize> {
+    NonZeroIsize::new(select_window_candidate(selector, candidates)?.handle)
+        .context("Matched window has a null handle")
 }
 
 #[cfg(any(windows, test))]
@@ -100,15 +110,15 @@ pub(super) fn validate_win32_control_unit_at(library_dir: Option<&Path>) -> Resu
 mod platform {
     use std::ptr;
 
-    use anyhow::{Context, Result};
+    use anyhow::{Context, Result, bail};
     use windows_sys::Win32::{
-        Foundation::{CloseHandle, HWND, LPARAM},
+        Foundation::{CloseHandle, HWND, LPARAM, RECT},
         System::Threading::{
             OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
         },
         UI::WindowsAndMessaging::{
-            EnumWindows, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
-            IsWindowVisible,
+            EnumWindows, GetClientRect, GetWindowTextLengthW, GetWindowTextW,
+            GetWindowThreadProcessId, IsWindowVisible,
         },
     };
 
@@ -168,14 +178,47 @@ mod platform {
         }
         Ok(candidates)
     }
+
+    pub(super) fn client_size(handle: isize) -> Result<(u32, u32)> {
+        let mut rectangle = RECT::default();
+        let hwnd = handle as HWND;
+        if unsafe { GetClientRect(hwnd, &mut rectangle) } == 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("Failed to read window client size");
+        }
+        let width = rectangle.right - rectangle.left;
+        let height = rectangle.bottom - rectangle.top;
+        if width <= 0 || height <= 0 {
+            bail!("Matched window has an empty client area");
+        }
+        Ok((width as u32, height as u32))
+    }
 }
 
 #[cfg(windows)]
-pub(super) fn resolve_window(selector: &WindowSelector<'_>) -> Result<maa_core::WindowHandle> {
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ResolvedWindow {
+    pub handle: maa_core::WindowHandle,
+    pub process_id: u32,
+    pub client_width: u32,
+    pub client_height: u32,
+}
+
+#[cfg(windows)]
+pub(super) fn resolve_window_with_metadata(
+    selector: &WindowSelector<'_>,
+) -> Result<ResolvedWindow> {
     let candidates = platform::enumerate()?;
-    let handle = select_window(selector, &candidates)?;
-    maa_core::WindowHandle::new(handle.get() as *mut std::ffi::c_void)
-        .context("Matched window has a null handle")
+    let candidate = select_window_candidate(selector, &candidates)?;
+    let handle = maa_core::WindowHandle::new(candidate.handle as *mut std::ffi::c_void)
+        .context("Matched window has a null handle")?;
+    let (client_width, client_height) = platform::client_size(candidate.handle)?;
+    Ok(ResolvedWindow {
+        handle,
+        process_id: candidate.process_id,
+        client_width,
+        client_height,
+    })
 }
 
 #[cfg(not(windows))]

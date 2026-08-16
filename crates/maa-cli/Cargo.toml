@@ -21,6 +21,7 @@ dunce = { workspace = true }
 env_logger = { workspace = true, features = ["auto-color"] }
 git2 = { workspace = true, optional = true }
 indicatif = { workspace = true }
+image = { workspace = true }
 log = { workspace = true }
 maa-dirs = { workspace = true }
 maa-installer = { workspace = true }

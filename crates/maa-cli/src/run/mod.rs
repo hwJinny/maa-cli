@@ -17,6 +17,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
+use image::ImageFormat;
 use log::{debug, warn};
 use maa_core::Assistant;
 use maa_dirs::{self as dirs, Ensure, MAA_CORE_LIB};
@@ -31,6 +32,130 @@ use crate::{
     },
     installer,
 };
+
+const CONNECTION_PROBE_SCHEMA_VERSION: u32 = 2;
+const WIN32_PROBE_CAPABILITY_VERSION: &str = "arkconsole-win32-probe-v2";
+
+#[derive(Debug, Clone, Default)]
+struct ConnectionProbeMetadata {
+    window_process_id: Option<u32>,
+    window_client_width: Option<u32>,
+    window_client_height: Option<u32>,
+    screencap_method: Option<u64>,
+    mouse_method: Option<u64>,
+    keyboard_method: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ScreenshotQuality {
+    normalized_width: u32,
+    normalized_height: u32,
+    non_black_ratio: f64,
+    luma_variance: f64,
+    black_frame: bool,
+    capture_quality_ok: bool,
+}
+
+fn analyze_screenshot_quality(png: &[u8]) -> Result<ScreenshotQuality> {
+    let image = image::load_from_memory_with_format(png, ImageFormat::Png)
+        .context("MaaCore returned an invalid PNG screenshot")?
+        .to_rgb8();
+    let width = image.width();
+    let height = image.height();
+    let count = u64::from(width) * u64::from(height);
+    if count == 0 {
+        bail!("MaaCore returned an empty PNG screenshot");
+    }
+
+    let mut non_black = 0_u64;
+    let mut luma_sum = 0_f64;
+    let mut luma_squared_sum = 0_f64;
+    for pixel in image.pixels() {
+        let [red, green, blue] = pixel.0;
+        if red.max(green).max(blue) > 8 {
+            non_black += 1;
+        }
+        let luma =
+            (0.299 * f64::from(red)) + (0.587 * f64::from(green)) + (0.114 * f64::from(blue));
+        luma_sum += luma;
+        luma_squared_sum += luma * luma;
+    }
+    let sample_count = count as f64;
+    let non_black_ratio = non_black as f64 / sample_count;
+    let mean = luma_sum / sample_count;
+    let luma_variance = (luma_squared_sum / sample_count - mean * mean).max(0.0);
+    let black_frame = non_black_ratio < 0.001;
+    let capture_quality_ok = !black_frame && luma_variance >= 4.0;
+    Ok(ScreenshotQuality {
+        normalized_width: width,
+        normalized_height: height,
+        non_black_ratio,
+        luma_variance,
+        black_frame,
+        capture_quality_ok,
+    })
+}
+
+fn connection_probe_success_payload(
+    connection: &str,
+    screenshot_bytes: usize,
+    quality: Option<&ScreenshotQuality>,
+    metadata: &ConnectionProbeMetadata,
+) -> serde_json::Value {
+    serde_json::json!({
+        "ok": true,
+        "schema_version": CONNECTION_PROBE_SCHEMA_VERSION,
+        "capability_version": WIN32_PROBE_CAPABILITY_VERSION,
+        "connection": connection,
+        "screenshot_bytes": screenshot_bytes,
+        "window_process_id": metadata.window_process_id,
+        "window_client_width": metadata.window_client_width,
+        "window_client_height": metadata.window_client_height,
+        "screencap_method": metadata.screencap_method,
+        "mouse_method": metadata.mouse_method,
+        "keyboard_method": metadata.keyboard_method,
+        "normalized_screenshot_width": quality.map(|value| value.normalized_width),
+        "normalized_screenshot_height": quality.map(|value| value.normalized_height),
+        "non_black_ratio": quality.map(|value| value.non_black_ratio),
+        "luma_variance": quality.map(|value| value.luma_variance),
+        "black_frame": quality.map(|value| value.black_frame),
+        "capture_quality_ok": quality.map(|value| value.capture_quality_ok),
+    })
+}
+
+fn connection_probe_failure_payload(error_code: &str) -> serde_json::Value {
+    let stable_code = if !error_code.is_empty()
+        && error_code.len() <= 80
+        && error_code
+            .bytes()
+            .all(|value| value.is_ascii_lowercase() || value.is_ascii_digit() || value == b'_')
+    {
+        error_code
+    } else {
+        "connection_probe_failed"
+    };
+    serde_json::json!({
+        "ok": false,
+        "schema_version": CONNECTION_PROBE_SCHEMA_VERSION,
+        "capability_version": WIN32_PROBE_CAPABILITY_VERSION,
+        "error_code": stable_code,
+    })
+}
+
+fn connection_capabilities_payload() -> serde_json::Value {
+    serde_json::json!({
+        "ok": true,
+        "schema_version": CONNECTION_PROBE_SCHEMA_VERSION,
+        "capability_version": WIN32_PROBE_CAPABILITY_VERSION,
+        "win32_supported": cfg!(windows),
+        "probe_fields": [
+            "raw_window_client_size",
+            "method_echo",
+            "capture_quality",
+            "structured_error_code",
+        ],
+    })
+}
 
 #[cfg_attr(test, derive(Debug, PartialEq))]
 #[derive(Args, Default)]
@@ -109,6 +234,9 @@ pub struct ConnectionTestArgs {
     /// Print a machine-readable JSON result
     #[arg(long)]
     pub json: bool,
+    /// Report connection probe capabilities without loading MaaCore or a profile
+    #[arg(long, conflicts_with_all = ["profile", "screencap"])]
+    pub capabilities: bool,
 }
 
 impl CommonArgs {
@@ -153,27 +281,34 @@ fn connect_assistant(
     asst: &Assistant,
     connection: &crate::config::asst::ConnectionConfig,
     address_override: Option<&str>,
-) -> Result<()> {
+) -> Result<ConnectionProbeMetadata> {
     match connection.connection_args()? {
         crate::config::asst::ConnectionArgs::Win32(args) => {
             #[cfg(windows)]
             {
                 let library = dirs::find_library();
                 window::validate_win32_control_unit_at(library.as_deref())?;
-                let hwnd = window::resolve_window(&args.selector)?;
+                let resolved = window::resolve_window_with_metadata(&args.selector)?;
                 asst.async_attach_window(
-                    hwnd,
+                    resolved.handle,
                     args.screencap_method,
                     args.mouse_method,
                     args.keyboard_method,
                     true,
                 )?;
-                Ok(())
+                Ok(ConnectionProbeMetadata {
+                    window_process_id: Some(resolved.process_id),
+                    window_client_width: Some(resolved.client_width),
+                    window_client_height: Some(resolved.client_height),
+                    screencap_method: Some(args.screencap_method),
+                    mouse_method: Some(args.mouse_method),
+                    keyboard_method: Some(args.keyboard_method),
+                })
             }
             #[cfg(not(windows))]
             {
                 window::resolve_window(&args.selector)?;
-                Ok(())
+                Ok(ConnectionProbeMetadata::default())
             }
         }
         crate::config::asst::ConnectionArgs::Adb {
@@ -183,12 +318,12 @@ fn connect_assistant(
         } => {
             let address = address_override.unwrap_or(address.as_ref());
             asst.async_connect(adb_path.as_ref(), address, config, true)?;
-            Ok(())
+            Ok(ConnectionProbeMetadata::default())
         }
     }
 }
 
-fn require_screenshot_bytes(image: Option<Vec<u8>>) -> Result<usize> {
+fn require_screenshot_bytes(image: Option<&[u8]>) -> Result<usize> {
     let image = image.context("Connection succeeded but MaaCore returned no screenshot")?;
     if image.is_empty() {
         bail!("Connection succeeded but MaaCore returned an empty screenshot");
@@ -210,31 +345,73 @@ fn connection_label(preset: crate::config::asst::Preset) -> &'static str {
 }
 
 pub fn test_connection(args: ConnectionTestArgs) -> Result<()> {
-    let asst_config = find_profile(dirs::config(), args.profile.as_deref())?;
-    ensure_connection_supported(&asst_config.connection)?;
-    load_core().context("Failed to load MaaCore!")?;
-    setup_core(&asst_config)?;
+    if args.capabilities {
+        let payload = connection_capabilities_payload();
+        if args.json {
+            println!("{payload}");
+        } else {
+            println!(
+                "Connection probe capability: {} (schema {})",
+                WIN32_PROBE_CAPABILITY_VERSION, CONNECTION_PROBE_SCHEMA_VERSION
+            );
+        }
+        return Ok(());
+    }
+    let mut error_code = "profile_load_failed";
+    let result = (|| -> Result<()> {
+        let asst_config = find_profile(dirs::config(), args.profile.as_deref())?;
+        error_code = "connection_platform_unsupported";
+        ensure_connection_supported(&asst_config.connection)?;
+        error_code = "maa_core_load_failed";
+        load_core().context("Failed to load MaaCore!")?;
+        error_code = "maa_core_setup_failed";
+        setup_core(&asst_config)?;
 
-    let asst = Assistant::new().context("Failed to create Assistant")?;
-    asst_config.instance_options.apply_to(&asst)?;
-    connect_assistant(&asst, &asst_config.connection, None)?;
-    let screenshot_bytes = if args.screencap {
-        require_screenshot_bytes(asst.get_fresh_image()?)?
-    } else {
-        0
-    };
-    let connection = connection_label(asst_config.connection.preset());
-    if args.json {
-        println!(
-            "{}",
-            serde_json::json!({
-                "ok": true,
-                "connection": connection,
-                "screenshot_bytes": screenshot_bytes,
-            })
-        );
-    } else {
-        println!("Connection test succeeded ({connection}, screenshot bytes: {screenshot_bytes})");
+        error_code = "assistant_create_failed";
+        let asst = Assistant::new().context("Failed to create Assistant")?;
+        asst_config.instance_options.apply_to(&asst)?;
+        error_code = if matches!(
+            asst_config.connection.preset(),
+            crate::config::asst::Preset::Win32
+        ) {
+            "win32_attach_failed"
+        } else {
+            "adb_connect_failed"
+        };
+        let metadata = connect_assistant(&asst, &asst_config.connection, None)?;
+        let (screenshot_bytes, quality) = if args.screencap {
+            error_code = "screenshot_capture_failed";
+            let screenshot = asst.get_fresh_image()?;
+            let screenshot_bytes = require_screenshot_bytes(screenshot.as_deref())?;
+            let screenshot = screenshot.expect("validated screenshot must be present");
+            let quality = analyze_screenshot_quality(&screenshot)?;
+            (screenshot_bytes, Some(quality))
+        } else {
+            (0, None)
+        };
+        let connection = connection_label(asst_config.connection.preset());
+        if args.json {
+            println!(
+                "{}",
+                connection_probe_success_payload(
+                    connection,
+                    screenshot_bytes,
+                    quality.as_ref(),
+                    &metadata,
+                )
+            );
+        } else {
+            println!(
+                "Connection test succeeded ({connection}, screenshot bytes: {screenshot_bytes})"
+            );
+        }
+        Ok(())
+    })();
+    if let Err(error) = result {
+        if args.json {
+            println!("{}", connection_probe_failure_payload(error_code));
+        }
+        return Err(error);
     }
     Ok(())
 }
@@ -458,15 +635,113 @@ fn setup_core(config: &AsstConfig) -> Result<()> {
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
-    use std::env::{self, temp_dir};
+    use std::{
+        env::{self, temp_dir},
+        io::Cursor,
+    };
+
+    use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
 
     use super::*;
 
     #[test]
     fn screenshot_probe_requires_a_non_empty_image() {
         assert!(require_screenshot_bytes(None).is_err());
-        assert!(require_screenshot_bytes(Some(Vec::new())).is_err());
-        assert_eq!(require_screenshot_bytes(Some(vec![1, 2, 3])).unwrap(), 3);
+        assert!(require_screenshot_bytes(Some(&[])).is_err());
+        assert_eq!(require_screenshot_bytes(Some(&[1, 2, 3])).unwrap(), 3);
+    }
+
+    fn png_bytes(image: RgbImage) -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        DynamicImage::ImageRgb8(image)
+            .write_to(&mut output, ImageFormat::Png)
+            .unwrap();
+        output.into_inner()
+    }
+
+    #[test]
+    fn screenshot_quality_rejects_black_or_flat_frames() {
+        let black = png_bytes(RgbImage::from_pixel(32, 32, Rgb([0, 0, 0])));
+        let black_quality = analyze_screenshot_quality(&black).unwrap();
+        assert!(black_quality.black_frame);
+        assert!(!black_quality.capture_quality_ok);
+        assert_eq!(black_quality.non_black_ratio, 0.0);
+
+        let flat = png_bytes(RgbImage::from_pixel(32, 32, Rgb([240, 240, 240])));
+        let flat_quality = analyze_screenshot_quality(&flat).unwrap();
+        assert!(!flat_quality.black_frame);
+        assert!(!flat_quality.capture_quality_ok);
+        assert_eq!(flat_quality.non_black_ratio, 1.0);
+        assert!(flat_quality.luma_variance < f64::EPSILON);
+
+        assert!(analyze_screenshot_quality(b"not-a-png").is_err());
+
+        let varied = png_bytes(RgbImage::from_fn(32, 32, |x, y| {
+            if (x + y) % 2 == 0 {
+                Rgb([235, 245, 250])
+            } else {
+                Rgb([12, 35, 52])
+            }
+        }));
+        let varied_quality = analyze_screenshot_quality(&varied).unwrap();
+        assert!(!varied_quality.black_frame);
+        assert!(varied_quality.capture_quality_ok);
+        assert!(varied_quality.non_black_ratio > 0.99);
+        assert!(varied_quality.luma_variance > 100.0);
+    }
+
+    #[test]
+    fn win32_probe_json_contract_is_versioned_and_echoes_methods() {
+        let quality = ScreenshotQuality {
+            normalized_width: 1280,
+            normalized_height: 720,
+            non_black_ratio: 0.75,
+            luma_variance: 42.5,
+            black_frame: false,
+            capture_quality_ok: true,
+        };
+        let metadata = ConnectionProbeMetadata {
+            window_process_id: Some(4242),
+            window_client_width: Some(1920),
+            window_client_height: Some(1080),
+            screencap_method: Some(2),
+            mouse_method: Some(128),
+            keyboard_method: Some(4),
+        };
+        let payload = connection_probe_success_payload("Win32", 4096, Some(&quality), &metadata);
+
+        assert_eq!(payload["ok"], true);
+        assert_eq!(payload["schema_version"], CONNECTION_PROBE_SCHEMA_VERSION);
+        assert_eq!(
+            payload["capability_version"],
+            WIN32_PROBE_CAPABILITY_VERSION
+        );
+        assert_eq!(payload["window_client_width"], 1920);
+        assert_eq!(payload["window_client_height"], 1080);
+        assert_eq!(payload["normalized_screenshot_width"], 1280);
+        assert_eq!(payload["normalized_screenshot_height"], 720);
+        assert_eq!(payload["screencap_method"], 2);
+        assert_eq!(payload["mouse_method"], 128);
+        assert_eq!(payload["keyboard_method"], 4);
+        assert_eq!(payload["black_frame"], false);
+        assert_eq!(payload["capture_quality_ok"], true);
+    }
+
+    #[test]
+    fn probe_failure_json_exposes_only_a_stable_error_code() {
+        let payload = connection_probe_failure_payload("win32_attach_failed");
+        assert_eq!(payload["ok"], false);
+        assert_eq!(payload["schema_version"], CONNECTION_PROBE_SCHEMA_VERSION);
+        assert_eq!(
+            payload["capability_version"],
+            WIN32_PROBE_CAPABILITY_VERSION
+        );
+        assert_eq!(payload["error_code"], "win32_attach_failed");
+        assert!(payload.get("detail").is_none());
+        assert!(payload.get("path").is_none());
+
+        let sanitized = connection_probe_failure_payload("bad:C:\\Users\\name");
+        assert_eq!(sanitized["error_code"], "connection_probe_failed");
     }
 
     #[test]
@@ -479,6 +754,19 @@ mod tests {
         assert_eq!(connection_label(Preset::Waydroid), "Waydroid");
         assert_eq!(connection_label(Preset::Androws), "Androws");
         assert_eq!(connection_label(Preset::Win32), "Win32");
+    }
+
+    #[test]
+    fn capabilities_are_reported_without_loading_a_profile() {
+        let payload = connection_capabilities_payload();
+        assert_eq!(payload["ok"], true);
+        assert_eq!(payload["schema_version"], 2);
+        assert_eq!(
+            payload["capability_version"],
+            WIN32_PROBE_CAPABILITY_VERSION
+        );
+        assert_eq!(payload["win32_supported"], cfg!(windows));
+        assert_eq!(payload["probe_fields"].as_array().unwrap().len(), 4);
     }
 
     #[cfg(not(windows))]

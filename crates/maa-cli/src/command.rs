@@ -573,6 +573,15 @@ mod test {
                 ..
             })) if profile == "arkconsole"
         );
+
+        assert_matches!(
+            parse_from(["maa", "connection", "test", "--capabilities", "--json"]).command,
+            Command::Connection(ConnectionCommand::Test(run::ConnectionTestArgs {
+                capabilities: true,
+                json: true,
+                ..
+            }))
+        );
     }
 
     #[test]
