@@ -88,6 +88,13 @@ pub struct CommonArgs {
     /// If you want to disable this behavior, you can use this option.
     #[arg(long, verbatim_doc_comment)]
     pub no_summary: bool,
+    /// Skip the online hot update for this run
+    ///
+    /// Existing cached resources are still loaded. Git resource updates remain
+    /// controlled by the resource.auto_update configuration setting.
+    /// This is not an offline mode and does not block other network requests.
+    #[arg(long, verbatim_doc_comment)]
+    pub no_hot_update: bool,
     /// Do not reconnect when game loses connection to server
     ///
     /// By default, maa will automatically reconnect when the game client
@@ -112,6 +119,11 @@ pub struct ConnectionTestArgs {
 }
 
 impl CommonArgs {
+    // Keep the decision separate from network I/O so both branches can be tested without MaaCore.
+    fn update_hot_resources(&self, update: impl FnOnce() -> Result<()>) -> Result<()> {
+        if self.no_hot_update { Ok(()) } else { update() }
+    }
+
     pub fn apply_to(&self, config: &mut AsstConfig) {
         if let Some(addr) = self.addr.as_ref() {
             config.connection.set_address(addr);
@@ -244,7 +256,7 @@ where
     F: FnOnce(&AsstConfig) -> Result<TaskConfig>,
 {
     // Auto update hot update resource
-    installer::hot_update::update()?;
+    args.update_hot_resources(installer::hot_update::update)?;
     installer::resource::update(true)?;
 
     // Load asst config
@@ -461,6 +473,118 @@ mod tests {
     use std::env::{self, temp_dir};
 
     use super::*;
+
+    #[test]
+    fn no_hot_update_is_an_explicit_task_option() -> Result<()> {
+        use clap::Parser;
+
+        use crate::command::{Cli, Command};
+
+        for arguments in [vec!["maa", "startup", "YoStarKR", "--no-hot-update"], vec![
+            "maa",
+            "run",
+            "fixture",
+            "--no-hot-update",
+            "--dry-run",
+        ]] {
+            let parsed = Cli::try_parse_from(arguments)?;
+            let common = match parsed.command {
+                Command::StartUp { common, .. } | Command::Run { common, .. } => common,
+                _ => panic!("expected an existing task command"),
+            };
+            assert!(common.no_hot_update);
+        }
+        // Connection probes do not enter the updater and need no task option.
+        assert!(Cli::try_parse_from(["maa", "connection", "test", "--no-hot-update"]).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn no_hot_update_is_disabled_by_default() -> Result<()> {
+        use clap::Parser;
+
+        use crate::command::{Cli, Command};
+
+        assert!(!CommonArgs::default().no_hot_update);
+        for arguments in [vec!["maa", "startup", "YoStarKR"], vec![
+            "maa",
+            "run",
+            "fixture",
+            "--dry-run",
+        ]] {
+            let parsed = Cli::try_parse_from(arguments)?;
+            let common = match parsed.command {
+                Command::StartUp { common, .. } | Command::Run { common, .. } => common,
+                _ => panic!("expected an existing task command"),
+            };
+            assert!(!common.no_hot_update);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn no_hot_update_skips_the_updater_entirely() -> Result<()> {
+        let args = CommonArgs {
+            no_hot_update: true,
+            ..Default::default()
+        };
+        let mut calls = 0;
+        args.update_hot_resources(|| {
+            calls += 1;
+            bail!("the disabled updater must not run")
+        })?;
+        assert_eq!(calls, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn default_hot_update_calls_the_updater_once() -> Result<()> {
+        let mut calls = 0;
+        CommonArgs::default().update_hot_resources(|| {
+            calls += 1;
+            Ok(())
+        })?;
+        assert_eq!(calls, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn default_hot_update_preserves_updater_errors() {
+        let mut calls = 0;
+        let result = CommonArgs::default().update_hot_resources(|| {
+            calls += 1;
+            Err(anyhow::Error::new(std::io::Error::from(
+                std::io::ErrorKind::PermissionDenied,
+            )))
+        });
+        assert_eq!(calls, 1);
+        // The injected updater always returns this error; success is a regression.
+        let error = result.expect_err("the enabled updater error must be returned");
+        assert_eq!(
+            error
+                .downcast_ref::<std::io::Error>()
+                .map(|error| error.kind()),
+            Some(std::io::ErrorKind::PermissionDenied)
+        );
+    }
+
+    #[test]
+    fn no_hot_update_help_explains_its_limited_scope() {
+        use clap::CommandFactory;
+
+        use crate::command::Cli;
+
+        let mut command = Cli::command();
+        // This existing subcommand is a required part of the task CLI contract.
+        let startup = command
+            .find_subcommand_mut("startup")
+            .expect("the existing startup command must be registered");
+        let help = startup.render_long_help().to_string();
+        assert!(help.contains("--no-hot-update"));
+        assert!(help.contains("cached resources"));
+        assert!(help.contains("Git resource updates"));
+        assert!(help.contains("not an offline mode"));
+    }
 
     #[test]
     fn screenshot_probe_requires_a_non_empty_image() {

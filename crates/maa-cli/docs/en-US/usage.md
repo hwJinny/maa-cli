@@ -70,6 +70,10 @@ Both predefined and custom tasks output summary information upon completion, inc
 
 If you don't want task summaries, disable them with the `--no-summary` parameter.
 
+### Skip the Online Hot Update
+
+Predefined and custom tasks accept `--no-hot-update` to skip the online hot update for that run, including a `--dry-run`. Without this option, the existing update behavior and errors are unchanged. Existing cached resources are still loaded, and Git resource updates remain controlled separately by `[resource] auto_update` in the CLI configuration. This is not an offline mode: task configuration or other features may still make network requests. For isolated resource verification, use dedicated configuration, data, state, and cache directories, explicitly set `auto_update = false`, and verify the resources before running a task; this option does not verify or remove existing overlays.
+
 ### Task Logging
 
 maa-cli outputs logs with the following levels (low to high): `Error`, `Warn`, `Info`, `Debug`, and `Trace`. The default level is `Warn`. Set the log level via the `MAA_LOG` environment variable (e.g., `MAA_LOG=debug`) or use `-v` to increase and `-q` to decrease the level.
