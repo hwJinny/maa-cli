@@ -4,6 +4,8 @@
 
 The maa-cli configuration files are located in a specific configuration directory, which you can get by running `maa dir config`. The configuration directory can also be changed by the environment variable `MAA_CONFIG_DIR`. In the following examples, we will use `$MAA_CONFIG_DIR` to represent the configuration directory.
 
+An empty string in `MAA_DATA_DIR`, `MAA_STATE_DIR`, `MAA_CACHE_DIR`, `MAA_CONFIG_DIR`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, or `XDG_CONFIG_HOME` is treated as unset. A non-empty `MAA_*_DIR` overrides the matching `XDG_*_HOME/maa` directory. When neither is set, maa-cli uses the platform default.
+
 All configuration files can be in TOML, YAML, or JSON format. In the following examples, we will use the TOML format and use `.toml` as the file extension. But you can mix these three formats, as long as your file extension is correct.
 
 In addition, some tasks accept `filename` as a parameter. When the relative path is used, the relative path will be relative to the corresponding subdirectory of the configuration directory. For example, the custom infrastructure plan files should be relative to `$MAA_CONFIG_DIR/infrast`, while the copilot files of Stationary Security Service should be relative to `$MAA_CONFIG_DIR/ssscopilot`.
@@ -414,6 +416,9 @@ Note: When using `PlayTools` connection, `touch_mode` is forced to `MacPlayTools
 CLI-related configurations should be in `$MAA_CONFIG_DIR/cli.toml`. Current configurations include:
 
 ```toml
+# Optional prefix for GitHub release assets. See the notes below.
+# github_proxy = "https://gh-proxy.org"
+
 # MaaCore install and update configurations
 [core]
 channel = "Stable" # Update channel: "Alpha", "Beta", or "Stable" (default)
@@ -469,6 +474,7 @@ passphrase = "password" # Passphrase for SSH key
 **NOTE**:
 
 - The `Alpha` channel for MaaCore is only available on Windows
+- `github_proxy` is an optional top-level string. A non-empty value rewrites only `https://github.com/<owner>/<repo>/releases/download/...` requests made by the HTTP client to `{prefix}/{original-url}`. Trailing slashes on the prefix are removed. An empty or omitted value leaves every URL unchanged. This applies to MaaCore and maa-cli release assets. It does not rewrite version-query URLs, GitHub raw URLs, the default `api.maa.plus` hot-update files, or the MaaResource git clone. If `cli.toml` cannot be parsed, the rewrite stays off. maa-cli does not choose a proxy host; set a prefix you trust, or point `api_url` and `download_url` at a mirror.
 - Hot update resources require the basic resources installed with MaaCore
 - Using the `git` backend requires the `git` command to be available
 - SSH authentication requires either `ssh_key` configuration or `ssh-agent`

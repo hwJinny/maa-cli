@@ -4,6 +4,8 @@
 
 maa-cli 配置文件位于特定的配置目录中，你可以通过 `maa dir config` 获取配置目录。配置目录也可以通过环境变量 `MAA_CONFIG_DIR` 更改。在下面的例子中，我们将用 `$MAA_CONFIG_DIR` 来表示配置目录。
 
+`MAA_DATA_DIR`、`MAA_STATE_DIR`、`MAA_CACHE_DIR`、`MAA_CONFIG_DIR`，以及 `XDG_DATA_HOME`、`XDG_STATE_HOME`、`XDG_CACHE_HOME`、`XDG_CONFIG_HOME`，如果值是空字符串，就视为未设置。非空的 `MAA_*_DIR` 优先于对应的 `XDG_*_HOME/maa`。两者都未设置时使用平台默认目录。
+
 所有的配置文件都可以使用 TOML，YAML 或者 JSON 格式，在下面的例子中，我们将使用 TOML 格式，并使用 `.toml` 作为文件扩展名。但是你可以混合这三种格式中的任意一种，只要你的文件扩展名正确。
 
 此外，部分任务接受 `filename` 作为参数，如果你使用相对路径，那么相对路径将会相对于配置目录的对应子目录。比如自定义基建计划文件的相对路径应该相对于 `$MAA_CONFIG_DIR/infrast`，而保全派驻的作业文件则相对于 `$MAA_CONFIG_DIR/ssscopilot`。
@@ -395,6 +397,9 @@ kill_adb_on_exit = false # 是否在退出时杀死 adb
 CLI 相关的配置需要放在 `$MAA_CONFIG_DIR/cli.toml` 中。目前其包含的配置如下：
 
 ```toml
+# 可选。只改写 GitHub release 资源地址，见下方注意事项。
+# github_proxy = "https://gh-proxy.org"
+
 # MaaCore 安装和更新相关配置
 [core]
 channel = "Stable" # 更新通道，可选值为 "Alpha"，"Beta" "Stable"，默认为 "Stable"
@@ -459,6 +464,7 @@ passphrase = "password"       # ssh 密钥的密码
 
 - MaaCore 的更新通道中 `Alpha` 只在 Windows 上可用；
 - 由于 CLI 默认的 API 链接和下载链接都是 GitHub 的链接，因此在国内可能会有一些问题，你可以通过配置 `api_url` 和 `download_url` 来使用镜像。
+- 顶层可选字段 `github_proxy` 只改写 HTTP 客户端请求的 `https://github.com/<owner>/<repo>/releases/download/...`，结果为 `{前缀}/{原始 URL}`。前缀末尾的 `/` 会去掉；空字符串或省略表示不改写。它覆盖 MaaCore 与 maa-cli 的发布文件下载。版本查询、GitHub raw、默认 `api.maa.plus` 热更新文件，以及 MaaResource 的 git 克隆都不会改写。`cli.toml` 无法解析时改写保持关闭。maa-cli 不代选代理主机。版本查询仍需要可访问的 `api_url` 或 `download_url`。
 - 即使启动了资源热更新，你依然需要安装 MaaCore 的资源，因为资源热更新并不包含所有的资源文件，只是包含部分可更新的资源文件，基础资源文件仍然需要安装。
 - 资源热更新是通过 Git 来拉取远程仓库，如果后端设置为 `git` 那么 `git` 命令行工具必须可用。
 - 如果你想要使用 SSH 协议来拉取远程仓库，你必须配置 `ssh_key` 字段，这个字段应该是一个路径，指向你的 SSH 私钥。

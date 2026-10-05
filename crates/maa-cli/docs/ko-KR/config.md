@@ -4,6 +4,8 @@
 
 maa-cli 설정 파일은 특정 설정 경로에 위치하며, `maa dir config` 명령어를 통해 설정 경로를 확인할 수 있습니다. 설정 경로는 환경 변수 `MAA_CONFIG_DIR`을 통해 변경할 수 있습니다. 아래 예시에서는 설정 경로를 `$MAA_CONFIG_DIR`로 표시하겠습니다.
 
+`MAA_DATA_DIR`, `MAA_STATE_DIR`, `MAA_CACHE_DIR`, `MAA_CONFIG_DIR`와 `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, `XDG_CONFIG_HOME`의 값이 빈 문자열이면 설정되지 않은 것으로 봅니다. 비어 있지 않은 `MAA_*_DIR`가 대응하는 `XDG_*_HOME/maa`보다 우선합니다. 둘 다 없으면 플랫폼 기본 경로를 사용합니다.
+
 모든 설정 파일은 TOML, YAML 또는 JSON 형식을 사용할 수 있으며, 아래 예시에서는 TOML 형식을 사용하고 파일 확장자는 `.toml`을 사용하겠습니다. 하지만 파일 확장자가 올바르면 이 세 가지 형식을 혼합해서 사용할 수 있습니다.
 
 또한 일부 작업은 `filename`을 매개변수로 받아들이며, 상대 경로를 사용할 경우 설정 경로의 해당 하위 경로를 기준으로 합니다. 예를 들어, 사용자 정의 기반 시설 계획 파일의 상대 경로는 `$MAA_CONFIG_DIR/infrast`를 기준으로 해야 하고, 보안 파견 작업 파일은 `$MAA_CONFIG_DIR/ssscopilot`를 기준으로 해야 합니다.
@@ -391,6 +393,9 @@ kill_adb_on_exit = false # 종료 시 adb를 종료할지 여부
 CLI 관련 설정은 `$MAA_CONFIG_DIR/cli.toml`에 있어야 합니다. 현재 포함된 설정은 다음과 같습니다:
 
 ```toml
+# 선택 사항. GitHub release 자산 주소만 바꿉니다. 아래 주의사항을 보세요.
+# github_proxy = "https://gh-proxy.org"
+
 # MaaCore 설치 및 업데이트 관련 설정
 [core]
 channel = "Stable" # 업데이트 채널, 가능한 값은 "Alpha", "Beta", "Stable", 기본값은 "Stable"
@@ -446,6 +451,7 @@ passphrase = "password"       # ssh 키의 암호
 
 - MaaCore의 업데이트 채널에서 `Alpha`는 Windows에서만 사용할 수 있습니다.
 - CLI의 기본 API 링크와 다운로드 링크는 GitHub 링크이므로 국내에서는 문제가 있을 수 있습니다. `api_url`과 `download_url`을 설정하여 미러를 사용할 수 있습니다.
+- 최상위 선택 필드 `github_proxy`는 HTTP 클라이언트가 요청하는 `https://github.com/<owner>/<repo>/releases/download/...`만 `{접두사}/{원래 URL}`로 바꿉니다. 접두사 끝의 `/`는 제거합니다. 빈 문자열이나 생략은 주소를 바꾸지 않습니다. MaaCore와 maa-cli 릴리스 파일 다운로드에 적용됩니다. 버전 조회, GitHub raw, 기본 `api.maa.plus` 핫 업데이트 파일, MaaResource git clone은 바꾸지 않습니다. `cli.toml`을 해석할 수 없으면 이 재작성은 꺼진 채로 둡니다. maa-cli는 프록시 호스트를 대신 고르지 않습니다. 버전 조회는 여전히 접근 가능한 `api_url` 또는 `download_url`이 필요합니다.
 - 리소스 핫 업데이트를 시작해도 MaaCore 리소스를 설치해야 합니다. 리소스 핫 업데이트는 모든 리소스 파일을 포함하지 않고 일부 업데이트 가능한 리소스 파일만 포함합니다. 기본 리소스 파일은 여전히 설치해야 합니다.
 - 리소스 핫 업데이트는 Git을 통해 원격 저장소를 가져옵니다. 백엔드를 `git`으로 설정한 경우 `Git` 명령어 도구가 사용 가능해야 합니다.
 - SSH 프로토콜을 사용하여 원격 저장소를 가져오려면 `ssh_key` 필드를 설정해야 합니다. 이 필드는 SSH 개인 키를 가리키는 경로여야 합니다.

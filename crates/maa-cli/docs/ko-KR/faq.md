@@ -8,3 +8,7 @@ Rust 라이브러리 [Directories](https://github.com/dirs-dev/directories-rs/)�
 mkdir -p "$HOME/.config/maa"
 ln -s "$HOME/.config/maa" "$(maa dir config)"
 ```
+
+## 2. 빈 `MAA_CONFIG_DIR`가 빈 경로를 가리키지 않는 이유는 무엇인가요?
+
+`MAA_DATA_DIR`, `MAA_STATE_DIR`, `MAA_CACHE_DIR`, `MAA_CONFIG_DIR`는 비어 있지 않은 값만 적용됩니다. `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, `XDG_CONFIG_HOME`도 같습니다. 따라서 `export MAA_CONFIG_DIR=`는 변수를 비운 것과 같습니다. maa-cli는 비어 있지 않은 `XDG_CONFIG_HOME/maa`로 돌아간 뒤, 그것도 없으면 플랫폼 기본 경로를 사용합니다. 공백만 있는 값은 빈 문자열이 아니므로 적힌 경로 그대로 사용합니다.

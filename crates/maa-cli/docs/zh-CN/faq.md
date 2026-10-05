@@ -8,3 +8,7 @@
 mkdir -p "$HOME/.config/maa"
 ln -s "$HOME/.config/maa" "$(maa dir config)"
 ```
+
+## 2. 为什么空的 `MAA_CONFIG_DIR` 不会指向一个空目录？
+
+`MAA_DATA_DIR`、`MAA_STATE_DIR`、`MAA_CACHE_DIR`、`MAA_CONFIG_DIR` 只有非空值才会生效。`XDG_DATA_HOME`、`XDG_STATE_HOME`、`XDG_CACHE_HOME`、`XDG_CONFIG_HOME` 同样如此。因此 `export MAA_CONFIG_DIR=` 等价于未设置：maa-cli 会回退到非空的 `XDG_CONFIG_HOME/maa`，再回退到平台默认目录。只包含空格的值不是空字符串，会按字面路径使用。
