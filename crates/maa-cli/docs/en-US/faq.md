@@ -8,3 +8,7 @@ Due to the Rust library [Directories](https://github.com/dirs-dev/directories-rs
 mkdir -p "$HOME/.config/maa"
 ln -s "$HOME/.config/maa" "$(maa dir config)"
 ```
+
+## 2. Why does an empty `MAA_CONFIG_DIR` not create an empty configuration path?
+
+`MAA_DATA_DIR`, `MAA_STATE_DIR`, `MAA_CACHE_DIR`, and `MAA_CONFIG_DIR` accept only a non-empty value. The same rule applies to `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, and `XDG_CONFIG_HOME`. `export MAA_CONFIG_DIR=` is therefore the same as leaving the variable unset: maa-cli falls back to a non-empty `XDG_CONFIG_HOME/maa`, then to the platform default. A path that is only spaces is not empty and is used as written.

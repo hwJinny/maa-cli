@@ -3,6 +3,10 @@
   "$id": "https://github.com/MaaAssistantArknights/maa-cli/raw/v0.5.3/crates/maa-cli/schemas/cli.schema.json",
   "type": "object",
   "properties": {
+    "github_proxy": {
+      "type": "string",
+      "description": "Optional prefix. Rewrites only https://github.com/*/releases/download/* URLs to {prefix}/{url}. An empty value disables the rewrite."
+    },
     "core": {
       "type": "object",
       "properties": {
