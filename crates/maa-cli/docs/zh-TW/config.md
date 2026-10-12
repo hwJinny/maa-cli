@@ -334,11 +334,27 @@ address = "127.0.0.1:7777" # 如果你需要的话，你可以覆盖预设的地
 
 #### 特殊预设
 
-目前预配置了两种特殊预设：`PlayCover`（macOS）和 `Waydroid`（Linux）
+目前预配置了 `PlayCover`（macOS）、`Waydroid`（Linux）、`Win32`（Windows）。`Win32` 的繁體說明如下。
 
 - `PlayCover` 用于在 macOS 上连接直接通过 `PlayCover` 原生运行的游戏客户端。这种情况下不需要指定 `adb_path`，`address` 是 `PlayTools` 的地址。具体使用参见 [PlayCover 支持文档][playcover-doc].
 
 - `Waydroid` 用于在 Linux 上连接直接通过 `Waydroid` 原生运行的游戏客户端。这种情况下仍需要指定 `adb_path` 供 MaaCore 连接设备使用。maa-cli 会自动管理会话：通过 `waydroid status` 检测会话是否已在运行，必要时启动会话，然后通过 `waydroid adb connect` 建立 ADB 连接。具体使用参见 [Waydroid 支持文档][waydroid-doc].
+
+- `Win32` 不透過 ADB，而是讓 MaaCore 附加到明日方舟官方 Windows PC 客戶端的可見頂層視窗。僅支援 Windows，其他系統會以 `Win32 connection is only supported on Windows` 失敗。預設名稱接受 `Win32`、`win32`、`PC`、`pc`。
+
+  `window_title` 為必填，不能是空字串，且必須與視窗標題完全一致。若有多個相同標題，請用 `window_process_id` 或 `window_executable` 消除歧義。執行檔以正規化路徑比較，Windows 上不區分大小寫。該路徑必須是可以正規化的現有檔案。未指定控制方式時，預設為 `screencap_method = 2`（`FramePool`）、`mouse_method = 32`（`SendMessageWithCursorPos`）、`keyboard_method = 2`（`SendMessage`）。
+
+  `MaaWin32ControlUnit.dll` 必須與 `MaaCore.dll` 位於同一目錄。`platform_diff_resource` 尚未設定時會自動載入 `PC`；若已有值則保留，並以警告忽略自動的 `PC`。maa-cli 不會啟動 PC 客戶端，也會關閉 `StartUp` 的 `start_game_enabled` 與應用程式啟動，因此執行任務前要先開啟所選客戶端。
+
+```toml
+[connection]
+preset = "Win32"
+window_title = "Arknights"
+window_process_id = 1234 # 選填
+window_executable = "C:\\Games\\Arknights.exe" # 選填。必須是可正規化的現有檔案
+```
+
+不執行任務即可用 `maa connection test --profile <名稱> --screencap --json` 檢查視窗連接。成功時結束碼為 0，並輸出 `{"ok":true,"connection":"Win32","screenshot_bytes":...}`。只有加上 `--screencap` 時才要求截圖非空。
 
 ### 资源配置
 
@@ -352,6 +368,8 @@ user_resource = true # 是否加载用户自定义的资源
 ```
 
 当使用非简体中文游戏客户端时，由于 MaaCore 默认加载的资源是简体中文的，你需要指定 `global_resource` 字段来加载非中文版本的资源。当使用 iOS 版本的游戏客户端时，你需要指定 `platform_diff_resource` 字段来加载 iOS 版本的资源。这两者都是可选的，如果你不需要加载这些资源，你可以将这两个字段设置为空。其次，这两者也会被自动设置，如果你的 `startup` 任务中指定了 `client_type` 字段，那么 `global_resource` 将会被设置为对应客户端的资源，而当你使用 `PlayTools` 连接时，`platform_diff_resource` 将会被设置为 `iOS`。最后，当你想要加载用户自定义的资源时，你需要将 `user_resource` 字段设置为 `true`。
+
+`Win32` 連線只在 `platform_diff_resource` 為空時自動設為 `PC`。已有值會保留，不會覆寫。`PlayTools` 的自動 `iOS` 也相同。
 
 ### 静态选项
 

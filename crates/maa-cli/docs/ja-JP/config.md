@@ -334,11 +334,27 @@ address = "127.0.0.1:7777" # 如果你需要的话，你可以覆盖预设的地
 
 #### 特殊预设
 
-目前预配置了两种特殊预设：`PlayCover`（macOS）和 `Waydroid`（Linux）
+目前预配置了 `PlayCover`（macOS）、`Waydroid`（Linux）、`Win32`（Windows）。`Win32` 的日文说明如下。
 
 - `PlayCover` 用于在 macOS 上连接直接通过 `PlayCover` 原生运行的游戏客户端。这种情况下不需要指定 `adb_path`，`address` 是 `PlayTools` 的地址。具体使用参见 [PlayCover 支持文档][playcover-doc].
 
 - `Waydroid` 用于在 Linux 上连接直接通过 `Waydroid` 原生运行的游戏客户端。这种情况下仍需要指定 `adb_path` 供 MaaCore 连接设备使用。maa-cli 会自动管理会话：通过 `waydroid status` 检测会话是否已在运行，必要时启动会话，然后通过 `waydroid adb connect` 建立 ADB 连接。具体使用参见 [Waydroid 支持文档][waydroid-doc].
+
+- `Win32` は ADB を使わず、公式 Windows PC クライアントのトップレベルウィンドウへ MaaCore を接続します。使えるのは Windows だけです。それ以外の OS では `Win32 connection is only supported on Windows` で失敗します。プリセット名は `Win32`、`win32`、`PC`、`pc` を受け付けます。
+
+  `window_title` は必須です。空文字は不可で、表示中のトップレベルウィンドウのタイトルと完全一致する必要があります。同じタイトルが複数あるときは `window_process_id` か `window_executable` で一つに絞ります。実行ファイルは正規化パスで比較し、Windows では大文字小文字を区別しません。指定したパスは正規化できる既存ファイルでなければなりません。制御方式を省略したときの既定値は `screencap_method = 2`（`FramePool`）、`mouse_method = 32`（`SendMessageWithCursorPos`）、`keyboard_method = 2`（`SendMessage`）です。
+
+  `MaaWin32ControlUnit.dll` が `MaaCore.dll` と同じディレクトリに必要です。`platform_diff_resource` が未設定なら `PC` を自動で読み込みます。すでに値がある場合はその値を残し、自動の `PC` は警告とともに無視します。maa-cli は PC クライアントを起動しません。このプリセットでは `StartUp` の `start_game_enabled` を無効にし、アプリ起動も行わないので、タスクの前に対象クライアントを起動してください。
+
+```toml
+[connection]
+preset = "Win32"
+window_title = "Arknights"
+window_process_id = 1234 # 任意
+window_executable = "C:\\Games\\Arknights.exe" # 任意。正規化できる既存ファイル
+```
+
+タスクを実行せずに接続を確認するには `maa connection test --profile <名前> --screencap --json` を使います。成功時の終了コードは 0 で、`{"ok":true,"connection":"Win32","screenshot_bytes":...}` を出力します。`--screencap` を付けたときだけ、空でないスクリーンショットを要求します。
 
 ### 资源配置
 
@@ -352,6 +368,8 @@ user_resource = true # 是否加载用户自定义的资源
 ```
 
 当使用非简体中文游戏客户端时，由于 MaaCore 默认加载的资源是简体中文的，你需要指定 `global_resource` 字段来加载非中文版本的资源。当使用 iOS 版本的游戏客户端时，你需要指定 `platform_diff_resource` 字段来加载 iOS 版本的资源。这两者都是可选的，如果你不需要加载这些资源，你可以将这两个字段设置为空。其次，这两者也会被自动设置，如果你的 `startup` 任务中指定了 `client_type` 字段，那么 `global_resource` 将会被设置为对应客户端的资源，而当你使用 `PlayTools` 连接时，`platform_diff_resource` 将会被设置为 `iOS`。最后，当你想要加载用户自定义的资源时，你需要将 `user_resource` 字段设置为 `true`。
+
+`Win32` 接続では、`platform_diff_resource` が空のときだけ `PC` を自動設定します。すでに値がある場合は維持され、上書きされません。`PlayTools` の自動 `iOS` も同じです。
 
 ### 静态选项
 
