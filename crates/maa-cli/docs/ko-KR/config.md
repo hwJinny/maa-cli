@@ -335,7 +335,7 @@ address = "127.0.0.1:7777" # 필요 시 사전 설정된 주소를 재정의할 
 
 - `Win32`는 ADB 없이 명일방주 공식 Windows PC 클라이언트 창에 MaaCore를 연결하며 Windows에서만 사용할 수 있습니다.
 
-   `window_title`은 필수이며 표시 중인 최상위 창 제목과 정확히 일치해야 합니다. 동일한 제목의 창이 둘 이상이면 `window_process_id` 또는 정규화된 경로로 비교되는 `window_executable`을 지정해야 합니다. 기본 제어 방식은 `screencap_method = 2`(`FramePool`), `mouse_method = 32`(`SendMessageWithCursorPos`), `keyboard_method = 2`(`SendMessage`)입니다.
+   `window_title`은 필수이며 비어 있을 수 없고, 표시 중인 최상위 창 제목과 정확히 일치해야 합니다. 동일한 제목의 창이 둘 이상이면 `window_process_id` 또는 정규화된 경로로 비교되는 `window_executable`을 지정해야 합니다. 이 경로는 정규화할 수 있는 기존 파일이어야 하며, Windows에서는 대소문자를 구분하지 않습니다. 프리셋 이름은 `Win32`, `win32`, `PC`, `pc`를 받습니다. 기본 제어 방식은 `screencap_method = 2`(`FramePool`), `mouse_method = 32`(`SendMessageWithCursorPos`), `keyboard_method = 2`(`SendMessage`)입니다.
 
    `MaaWin32ControlUnit.dll`이 `MaaCore.dll`과 같은 디렉터리에 있어야 하며 `PC` 플랫폼 리소스는 자동으로 로드됩니다. maa-cli는 PC 클라이언트를 직접 실행하지 않고 이 프리셋에서는 `StartUp.start_game_enabled`를 비활성화하므로, 작업 실행 전에 선택한 클라이언트를 시작해야 합니다.
 
@@ -360,7 +360,7 @@ platform_diff_resource = "iOS" # 비 안드로이드 버전의 리소스
 user_resource = true # 사용자 정의 리소스를 로드할지 여부
 ```
 
-비 중국어 게임 클라이언트를 사용할 때, MaaCore는 기본적으로 간체 중국어 리소스를 로드하기 때문에 `global_resource` 필드를 지정하여 비중문 버전의 리소스를 로드해야 합니다. iOS 버전의 게임 클라이언트를 사용할 때는 `platform_diff_resource` 필드를 지정하여 iOS 버전의 리소스를 로드해야 합니다. 이 두 필드는 선택 사항이며, 리소스를 로드할 필요가 없는 경우 두 필드를 비워둘 수 있습니다. 또한, `startup` 작업에서 `client_type` 필드를 지정한 경우 `global_resource`는 해당 클라이언트의 리소스로 설정되며, `PlayTools` 연결은 `iOS`, `Win32` 연결은 `PC` 플랫폼 리소스를 자동으로 설정합니다. 마지막으로 사용자 정의 리소스를 로드하려는 경우 `user_resource` 필드를 `true`로 설정해야 합니다.
+비 중국어 게임 클라이언트를 사용할 때, MaaCore는 기본적으로 간체 중국어 리소스를 로드하기 때문에 `global_resource` 필드를 지정하여 비중문 버전의 리소스를 로드해야 합니다. iOS 버전의 게임 클라이언트를 사용할 때는 `platform_diff_resource` 필드를 지정하여 iOS 버전의 리소스를 로드해야 합니다. 이 두 필드는 선택 사항이며, 리소스를 로드할 필요가 없는 경우 두 필드를 비워둘 수 있습니다. 또한, `startup` 작업에서 `client_type` 필드를 지정한 경우 `global_resource`는 해당 클라이언트의 리소스로 설정되며, `PlayTools` 연결은 `iOS`, `Win32` 연결은 `PC` 플랫폼 리소스를 자동으로 설정합니다. `platform_diff_resource`에 이미 값이 있으면 그 값을 유지하고 자동 `iOS` 또는 `PC`는 무시합니다. 마지막으로 사용자 정의 리소스를 로드하려는 경우 `user_resource` 필드를 `true`로 설정해야 합니다.
 
 ### 정적 옵션
 
