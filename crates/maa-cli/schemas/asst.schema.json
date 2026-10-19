@@ -8,7 +8,7 @@
       "properties": {
         "preset": {
           "type": "string",
-          "enum": ["ADB", "PlayCover", "MuMuPro", "Waydroid", "Win32"],
+          "enum": ["ADB", "PlayCover", "MuMuPro", "Waydroid", "Androws", "Win32"],
           "default": "ADB"
         },
         "adb_path": {

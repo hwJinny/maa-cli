@@ -323,13 +323,32 @@ adb_path = "/path/to/adb" # 필요 시 사전 설정된 adb 경로를 재정의�
 address = "127.0.0.1:7777" # 필요 시 사전 설정된 주소를 재정의할 수 있습니다.
 ```
 
-현재 `MuMuPro` 한 가지 에뮬레이터만 사전 설정이 있으며, 다른 일반적인 에뮬레이터의 사전 설정을 추가하고 싶다면 issue나 PR을 제출하세요。
+내장 에뮬레이터 프리셋은 `MuMuPro`와 `Androws`입니다. `Androws`(별칭 `androws`)는 Windows의 텐센트 응용보(Androws)에 ADB로 연결합니다.
+
+`adb_path`를 생략하면 Windows는 레지스트리로 내장 `adb.exe` 경로를 만듭니다.
+
+- `HKLM\SOFTWARE\Tencent\Androws`의 `InstallPath`
+- `HKLM\SOFTWARE\Tencent\Androws\Androws`의 `Version`
+- `{InstallPath}\Application\{Version}\adb.exe`. 이 파일이 있을 때만 사용합니다
+
+레지스트리를 읽지 못하거나 파일이 없으면 `PATH`의 `adb`로 돌아가며, 예상 파일이 없으면 경고를 남깁니다. Windows가 아니면 이 레지스트리를 읽지 않고 기본 `adb_path`도 `adb`입니다. 기본 `address`는 `127.0.0.1:5555`, 기본 `config`는 `Androws`입니다. `adb_path`, `address`, `config`로 이 기본값을 덮어쓸 수 있습니다. 응용보는 상승된 권한으로 실행되므로 maa-cli는 프로세스 목록으로 adb를 찾지 않습니다.
+
+```toml
+[connection]
+preset = "Androws"
+# adb_path = "C:\\Program Files\\Androws\\Application\\1.2.3.4\\adb.exe"
+# address = "127.0.0.1:5555"
+```
+
+다른 에뮬레이터 프리셋은 issue나 PR로 제안해 주세요.
 
 #### 특수 프리셋
 
 여기에는 두 가지 특수 프리셋이 있습니다: `PlayCover`(macOS) 및 `Waydroid`(Linux)
 
 - `PlayCover`는 macOS에서 `PlayCover`를 통해 iOS 앱을 실행하는 데 사용됩니다。이 경우 `adb_path`는 무시되고 `address`는 `PlayTools` 주소입니다。자세한 내용은 [PlayCover 지원 문서][playcover-doc]을 참고하세요。
+
+  `StartUp` 작업의 `start_game_enabled = true`이면 maa-cli는 먼저 `open -a`로 `~/Library/Containers/io.playcover.PlayCover/Applications/<bundle id>.app`를 실행합니다. 그 경로로 시작하지 못하거나 홈 디렉터리를 얻지 못하면 `open -b <bundle id>`로 돌아갑니다. `PlayTools` 주소에 이미 연결되면 클라이언트를 다시 시작하지 않습니다. Bilibili 클라이언트에는 App Store bundle id가 없어 maa-cli가 시작할 수 없습니다. 이미 실행 중인 PlayTools 세션에는 연결할 수 있습니다.
 
 - `Waydroid`는 Linux에서 `Waydroid`를 통해 Android 앱을 실행하는 데 사용됩니다。이 경우 MaaCore의 장치 연결에 `adb_path`를 지정해야 합니다。maa-cli는 `waydroid status`를 사용하여 세션이 이미 실행 중인지 감지하고, 필요 시 세션을 시작한 다음 `waydroid adb connect`를 통해 ADB 연결을 설정합니다。자세한 내용은 [Waydroid 지원 문서][waydroid-doc]을 참조하세요。
 
