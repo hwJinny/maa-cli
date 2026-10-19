@@ -1055,6 +1055,7 @@ mod tests {
                 serde_json::from_str(include_str!("../../schemas/asst.schema.json")).unwrap();
             let connection = &schema["properties"]["connection"]["properties"];
             let presets = connection["preset"]["enum"].as_array().unwrap();
+            assert!(presets.iter().any(|value| value == "Androws"));
             assert!(presets.iter().any(|value| value == "Win32"));
             assert_eq!(connection["window_title"]["type"], "string");
             assert_eq!(connection["window_process_id"]["type"], "integer");

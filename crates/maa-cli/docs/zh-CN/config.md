@@ -326,13 +326,32 @@ adb_path = "/path/to/adb" # 如果你需要的话，你可以覆盖预设的 adb
 address = "127.0.0.1:7777" # 如果你需要的话，你可以覆盖预设的地址
 ```
 
-目前只有 `MuMuPro` 一个模拟器的预设，如果有其他常用模拟器的预设，欢迎提交 issue 或者 PR。
+内置模拟器预设有 `MuMuPro` 和 `Androws`。`Androws`（别名 `androws`）用于通过 ADB 连接 Windows 上的腾讯应用宝 Androws。
+
+未设置 `adb_path` 时，Windows 会按注册表拼出应用宝自带的 `adb.exe`：
+
+- `HKLM\SOFTWARE\Tencent\Androws` 的 `InstallPath`
+- `HKLM\SOFTWARE\Tencent\Androws\Androws` 的 `Version`
+- `{InstallPath}\Application\{Version}\adb.exe`，仅当该文件存在时使用
+
+读不到注册表，或该文件不存在时，回退到 `PATH` 中的 `adb`；预期文件缺失时会记录警告。非 Windows 平台不读取该注册表，默认 `adb_path` 同样是 `adb`。默认 `address` 是 `127.0.0.1:5555`，默认 `config` 是 `Androws`。可以设置 `adb_path`、`address` 或 `config` 覆盖这些默认值。应用宝以提升权限运行，maa-cli 不会通过进程列表查找它的 adb。
+
+```toml
+[connection]
+preset = "Androws"
+# adb_path = "C:\\Program Files\\Androws\\Application\\1.2.3.4\\adb.exe"
+# address = "127.0.0.1:5555"
+```
+
+其他模拟器预设欢迎提交 issue 或 PR。
 
 #### 特殊预设
 
 目前预配置了两种预设，为 `PlayCover` (MacOS), `Waydroid` (Linux)
 
 - `PlayCover`用于在 macOS 上连接直接通过 `PlayCover` 原生运行的游戏客户端。这种情况下不需要指定 `adb_path` 且 `address` 不是 `adb` 连接的地址而是 `PlayTools` 的地址，具体使用参见 [PlayCover 支持文档][playcover-doc].
+
+  `StartUp` 任务的 `start_game_enabled = true` 时，maa-cli 会先用 `open -a` 启动 `~/Library/Containers/io.playcover.PlayCover/Applications/<bundle id>.app`。该路径启动失败，或无法取得用户主目录时，才回退到 `open -b <bundle id>`。`PlayTools` 地址已经可以连接时不会再次启动。Bilibili 客户端没有 App Store bundle id，maa-cli 不能启动它；已经在运行的 PlayTools 会话仍可连接。
 
 - `Waydroid`用于在 Linux 上连接直接通过 `Waydroid` 原生运行的游戏客户端。这种情况下仍需要指定 `adb_path` 供 MaaCore 连接设备使用。maa-cli 会自动管理会话：通过 `waydroid status` 检测会话是否已在运行，必要时启动会话，然后通过 `waydroid adb connect` 建立 ADB 连接。
   具体使用参见 [Waydroid 支持文档][waydroid-doc].

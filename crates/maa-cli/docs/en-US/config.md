@@ -337,7 +337,24 @@ adb_path = "/path/to/adb" # Override the preset's adb path if needed (optional)
 address = "127.0.0.1:7777" # Override the preset's address if needed (optional)
 ```
 
-Currently only `MuMuPro` preset is available. Issues and PRs for more presets are welcome.
+Built-in emulator presets are `MuMuPro` and `Androws`. `Androws` (alias `androws`) connects to Tencent Androws, the Windows 应用宝 emulator, over ADB.
+
+When `adb_path` is omitted, Windows builds the bundled `adb.exe` path from the registry:
+
+- `InstallPath` under `HKLM\SOFTWARE\Tencent\Androws`
+- `Version` under `HKLM\SOFTWARE\Tencent\Androws\Androws`
+- `{InstallPath}\Application\{Version}\adb.exe`, used only when that file exists
+
+If the registry keys cannot be read or the file is missing, maa-cli falls back to `adb` on `PATH` and logs a warning when the expected file is absent. Non-Windows builds do not read that registry and also default `adb_path` to `adb`. The default `address` is `127.0.0.1:5555` and the default `config` is `Androws`. Set `adb_path`, `address`, or `config` to override those defaults. Androws runs elevated, so maa-cli does not discover its adb by inspecting the process list.
+
+```toml
+[connection]
+preset = "Androws"
+# adb_path = "C:\\Program Files\\Androws\\Application\\1.2.3.4\\adb.exe"
+# address = "127.0.0.1:5555"
+```
+
+Issues and PRs for other emulator presets are welcome.
 
 #### Special Presets
 
@@ -347,6 +364,8 @@ There are two special presets: `PlayCover` (macOS) and `Waydroid` (Linux)
 
    In this case, `adb_path` is ignored and `address` is the address of `PlayTools`.
    See [PlayCover documentation][playcover-doc] for details.
+
+   When a `StartUp` task has `start_game_enabled = true`, maa-cli first launches `~/Library/Containers/io.playcover.PlayCover/Applications/<bundle id>.app` with `open -a`. If that launch fails, or the home directory is unavailable, it falls back to `open -b <bundle id>`. If the PlayTools address already accepts a connection, the client is left running. The Bilibili client has no App Store bundle id, so maa-cli cannot launch it; an already running PlayTools session can still be used.
 
 - `Waydroid` is for connecting to Android apps running natively on Linux through Waydroid.
 
