@@ -98,5 +98,23 @@ maa-cli 默认会向标准误 (stderr) 输出日志。`--log-file` 选项可以�
 
 更多命令的使用方法可以通过 `maa help` 查看，具体命令的使用方法可以 通过 `maa help <command>` 查看。
 
+## 测试连接
+
+`maa connection test` 使用已经保存的 profile 连接或附加到客户端，并等待这次连接结束。它不添加、不启动任务，也不安装或更新 MaaCore，也不拉取资源热更新。MaaCore 和至少一处资源目录必须已经存在，否则加载资源会失败。
+
+```bash
+maa connection test --screencap
+maa connection test --profile my-profile --screencap --json
+```
+
+省略 `--profile` 时，按 `json`、`yaml`、`yml`、`toml` 的顺序查找配置目录下的 `profiles/default`。都没有时再查找已弃用的 `asst` 配置。仍然没有时使用内置默认值：`ADB` 预设，先用 `adb devices` 寻找在线设备，找不到则使用 `emulator-5554`。指定 `--profile` 时只查找 `profiles/<名称>`，名称不要带扩展名；找不到就失败。配置目录可以用 `maa dir config` 查看。
+
+`--screencap` 在连接成功后抓取一张截图，并等待截图返回。没有截图或截图为空时命令失败。省略该选项时不会抓图，成功结果中的 `screenshot_bytes` 为 0；这只表示没有要求抓图。
+
+加上 `--json` 且成功时，标准输出只有一行 `{"ok":true,"connection":"<预设>","screenshot_bytes":<字节数>}`。`connection` 是 `ADB`、`MuMuPro`、`PlayCover`、`Waydroid`、`Androws` 或 `Win32`。不加 `--json` 时成功输出是 `Connection test succeeded (<预设>, screenshot bytes: <字节数>)`。成功退出码为 0。失败时不打印上述成功结果，也没有 `ok` 为 false 的 JSON，进程以非零状态退出。
+
+此命令不会打开 PlayCover，也不会查询或启动 Waydroid 会话；那两步只在真正运行任务时发生。Waydroid 预设在测试里使用的地址是 `waydroid`，profile 中的 `address` 会被忽略。因此截图测试要求客户端或模拟器已经处于该 profile 能连上的状态。`Win32` 只能在 Windows 上使用，并且 `window_title` 不能为空。窗口匹配和各预设字段见 [连接配置][config-connection]。
+
 [config-core]: config.md#maacore-相关配置
+[config-connection]: config.md#连接配置
 [custom-task]: config.md#自定义任务

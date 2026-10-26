@@ -93,5 +93,23 @@ maa-cli는 기본적으로 표준 오류(stderr)에 로그를 출력합니다. `
 
 더 많은 명령어 사용 방법은 `maa help`를 통해 확인할 수 있으며, 특정 명령어의 사용 방법은 `maa help <command`>를 통해 확인할 수 있습니다.
 
+## 연결 테스트
+
+`maa connection test`는 저장된 profile로 클라이언트에 연결하거나 창에 붙이고, 그 시도가 끝날 때까지 기다립니다. 작업을 추가하거나 시작하지 않으며, MaaCore를 설치·업데이트하거나 리소스 핫 업데이트를 받지 않습니다. MaaCore와 리소스 디렉터리가 적어도 하나는 이미 있어야 하며, 없으면 리소스 로드가 실패합니다.
+
+```bash
+maa connection test --screencap
+maa connection test --profile my-profile --screencap --json
+```
+
+`--profile`을 생략하면 설정 디렉터리의 `profiles/default`를 `json`, `yaml`, `yml`, `toml` 순서로 찾습니다. 없으면 더 이상 쓰지 않는 `asst` 설정을 찾습니다. 그것도 없으면 내장 기본값을 사용합니다. 기본값은 `ADB` 프리셋이며, `adb devices`로 온라인 장치를 찾고, 찾지 못하면 `emulator-5554`를 사용합니다. `--profile`을 지정하면 `profiles/<이름>`만 찾으며 이름에 확장자를 붙이지 않습니다. 파일이 없으면 명령은 실패합니다. 설정 디렉터리는 `maa dir config`로 확인합니다.
+
+`--screencap`은 연결에 성공한 뒤 스크린샷 한 장을 찍고 결과가 돌아올 때까지 기다립니다. 스크린샷이 없거나 비어 있으면 명령은 실패합니다. 이 옵션을 생략하면 스크린샷을 찍지 않으며, 성공 결과의 `screenshot_bytes`는 0입니다. 이 0은 빈 스크린샷이 아니라 캡처를 요청하지 않았다는 뜻입니다.
+
+`--json`을 주고 성공하면 표준 출력에 `{"ok":true,"connection":"<프리셋>","screenshot_bytes":<바이트 수>}` 한 줄만 나옵니다. `connection`은 `ADB`, `MuMuPro`, `PlayCover`, `Waydroid`, `Androws`, `Win32` 중 하나입니다. `--json`이 없으면 성공 출력은 `Connection test succeeded (<프리셋>, screenshot bytes: <바이트 수>)`입니다. 성공 종료 코드는 0입니다. 실패하면 이 성공 결과를 출력하지 않고, `ok`가 false인 JSON도 없으며, 프로세스는 0이 아닌 상태로 종료합니다.
+
+이 명령은 PlayCover를 실행하지 않고 Waydroid 세션을 조회하거나 시작하지도 않습니다. 그 동작은 실제로 작업을 실행할 때만 일어납니다. Waydroid 프리셋 테스트의 주소는 `waydroid`이며 profile의 `address`는 무시됩니다. 따라서 스크린샷 테스트 전에 클라이언트나 에뮬레이터가 해당 profile로 연결 가능한 상태여야 합니다. `Win32`는 Windows에서만 사용할 수 있고 `window_title`은 비어 있으면 안 됩니다. 창 일치 조건과 프리셋 필드는 [연결 설정][config-connection]을 참고하세요.
+
 [config-core]: config.md#maacore-관련-설정
+[config-connection]: config.md#연결-설정
 [custom-task]: config.md#사용자-정의-작업
