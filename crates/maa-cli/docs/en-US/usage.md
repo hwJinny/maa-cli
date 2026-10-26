@@ -93,5 +93,23 @@ Besides the above commands, maa-cli provides additional subcommands:
 
 For more command information, use `maa help`. For specific command details, use `maa help <command>`.
 
+## Test a Connection
+
+`maa connection test` connects or attaches with a saved profile and waits for that attempt to finish. It does not append or start tasks, and it does not install or update MaaCore or hot-update resources. MaaCore and at least one resource directory must already exist; otherwise resource loading fails.
+
+```bash
+maa connection test --screencap
+maa connection test --profile my-profile --screencap --json
+```
+
+Without `--profile`, maa-cli searches `profiles/default` under the config directory in the order `json`, `yaml`, `yml`, `toml`. If none exists, it tries the deprecated `asst` config. If that is also missing, it uses the built-in default: the `ADB` preset, detects an online device with `adb devices`, and falls back to `emulator-5554` when detection fails. With `--profile`, it looks only for `profiles/<name>` and the name must not include an extension; a missing file fails the command. Run `maa dir config` to locate the config directory.
+
+`--screencap` captures one screenshot after the connection succeeds and waits for it to return. The command fails when MaaCore returns no screenshot or an empty screenshot. Without this option no screenshot is taken, and a successful result reports `screenshot_bytes` as 0. That value means the capture was not requested.
+
+With `--json`, success prints one line to stdout: `{"ok":true,"connection":"<preset>","screenshot_bytes":<byte count>}`. `connection` is one of `ADB`, `MuMuPro`, `PlayCover`, `Waydroid`, `Androws`, or `Win32`. Without `--json`, success prints `Connection test succeeded (<preset>, screenshot bytes: <byte count>)`. Success exits with code 0. Failure does not print that success result and does not emit JSON with `ok` set to false; the process exits with a non-zero status.
+
+This command does not launch PlayCover and does not query or start a Waydroid session. Those steps happen only when a task actually runs. A Waydroid test uses the address `waydroid` and ignores `address` in the profile. A screenshot test therefore requires the client or emulator to already be reachable with that profile. `Win32` works only on Windows and requires a non-empty `window_title`. Window matching and the preset fields are described in [Connection][config-connection].
+
 [config-core]: config.md#maacore-related-configurations
+[config-connection]: config.md#connection
 [custom-task]: config.md#custom-tasks
